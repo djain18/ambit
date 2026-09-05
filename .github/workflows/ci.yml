@@ -1,0 +1,49 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Unit and integration tests. No network: the decision layer has no
+      # external dependency, and the Razorpay client is not exercised here.
+      - name: Tests
+        env:
+          PYTHONPATH: src
+          AMBIT_REQUIRE_TEST_MODE: "true"
+        run: python -m pytest -q
+
+      # The labelled scenarios. The decision layer is deterministic, so the
+      # target is 100% and a single miss fails the build.
+      - name: Decision evals
+        run: python execution/run_evals.py --json evals-report.json
+
+      # A chain that cannot be verified from a clean checkout is not evidence.
+      # This builds a fresh chain, verifies it, then corrupts a row and
+      # asserts that verification actually notices.
+      - name: Audit chain verifies, and breaks when tampered
+        run: python execution/verify_audit_chain.py --self-test
+
+      - name: Upload eval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evals-report
+          path: evals-report.json
+          if-no-files-found: ignore

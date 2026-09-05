@@ -1,0 +1,472 @@
+{
+  "_about": [
+    "Labelled purchase attempts for the BOUND decision layer.",
+    "Every scenario states the expected outcome AND the check expected to bind it.",
+    "Accuracy target is 100%, because the layer is deterministic. That is the",
+    "claim being made, so anything below 100% is a bug and the runner exits 1.",
+    "",
+    "The baseline grant, overridden per scenario via `grant`:",
+    "  per_transaction_paise   500000   (Rs 5,000)",
+    "  total_paise            2000000   (Rs 20,000)",
+    "  step_up_above_paise     200000   (Rs 2,000)",
+    "  velocity                     2 per 3600s",
+    "  max_transactions_per_day     5",
+    "  allow merchants   mrc_demo_store        deny merchants   mrc_blocked_store",
+    "  allow categories  groceries, software   deny categories  gambling",
+    "  valid from BASE_NOW - 1 day, until BASE_NOW + 7 days",
+    "",
+    "setup ops: revoke | tamper | ledger | prior_request",
+    "request.offset_seconds is relative to BASE_NOW (2026-09-05T12:00:00Z)."
+  ],
+
+  "scenarios": [
+    {
+      "id": "allow-01", "family": "allow",
+      "name": "clean groceries purchase inside every limit",
+      "request": {"amount_paise": 100000},
+      "expect": {"outcome": "ALLOW", "binding_check": null}
+    },
+    {
+      "id": "allow-02", "family": "allow",
+      "name": "second allowed category is equally allowed",
+      "request": {"amount_paise": 150000, "category": "software"},
+      "expect": {"outcome": "ALLOW", "binding_check": null}
+    },
+    {
+      "id": "allow-03", "family": "boundary",
+      "name": "exactly at the step-up threshold is allowed, the rule is strictly above",
+      "request": {"amount_paise": 200000},
+      "expect": {"outcome": "ALLOW", "binding_check": null}
+    },
+    {
+      "id": "allow-04", "family": "boundary",
+      "name": "one paise is a legitimate purchase",
+      "request": {"amount_paise": 1},
+      "expect": {"outcome": "ALLOW", "binding_check": null}
+    },
+    {
+      "id": "allow-05", "family": "boundary",
+      "name": "valid exactly at not_before",
+      "request": {"amount_paise": 50000, "offset_seconds": -86400},
+      "expect": {"outcome": "ALLOW", "binding_check": null}
+    },
+    {
+      "id": "allow-06", "family": "velocity",
+      "name": "one prior purchase in the window still leaves a slot",
+      "setup": [{"op": "ledger", "amount_paise": 50000, "minutes_ago": 10}],
+      "request": {"amount_paise": 100000},
+      "expect": {"outcome": "ALLOW", "binding_check": null}
+    },
+    {
+      "id": "allow-07", "family": "budget",
+      "name": "an in-flight hold older than the TTL has been released",
+      "setup": [{"op": "ledger", "amount_paise": 1900000, "minutes_ago": 20, "state": "authorised"}],
+      "request": {"amount_paise": 150000},
+      "expect": {"outcome": "ALLOW", "binding_check": null}
+    },
+    {
+      "id": "allow-08", "family": "boundary",
+      "name": "spending the exact remaining budget is allowed",
+      "grant": {"step_up_above_paise": 2000000},
+      "setup": [{"op": "ledger", "amount_paise": 1500000, "minutes_ago": 120, "state": "captured"}],
+      "request": {"amount_paise": 500000},
+      "expect": {"outcome": "ALLOW", "binding_check": null}
+    },
+
+    {
+      "id": "stepup-01", "family": "stepup",
+      "name": "one paise above the step-up threshold needs a human",
+      "request": {"amount_paise": 200001},
+      "expect": {"outcome": "STEP_UP", "binding_check": "STEP_UP_THRESHOLD"}
+    },
+    {
+      "id": "stepup-02", "family": "stepup",
+      "name": "comfortably above the threshold and under the per-transaction cap",
+      "request": {"amount_paise": 350000},
+      "expect": {"outcome": "STEP_UP", "binding_check": "STEP_UP_THRESHOLD"}
+    },
+    {
+      "id": "stepup-03", "family": "stepup",
+      "name": "exactly at the per-transaction cap still only steps up",
+      "request": {"amount_paise": 500000},
+      "expect": {"outcome": "STEP_UP", "binding_check": "STEP_UP_THRESHOLD"}
+    },
+    {
+      "id": "stepup-04", "family": "stepup",
+      "name": "step-up applies to every allowed category, not just groceries",
+      "request": {"amount_paise": 300000, "category": "software"},
+      "expect": {"outcome": "STEP_UP", "binding_check": "STEP_UP_THRESHOLD"}
+    },
+
+    {
+      "id": "sig-01", "family": "grant",
+      "name": "raising the per-transaction cap after signing breaks the signature",
+      "setup": [{"op": "tamper", "field": "limits.per_transaction_paise", "value": 99999999}],
+      "request": {"amount_paise": 900000},
+      "expect": {"outcome": "DENY", "binding_check": "GRANT_SIGNATURE"}
+    },
+    {
+      "id": "sig-02", "family": "grant",
+      "name": "raising the step-up threshold after signing breaks the signature",
+      "setup": [{"op": "tamper", "field": "step_up_above_paise", "value": 99999999}],
+      "request": {"amount_paise": 400000},
+      "expect": {"outcome": "DENY", "binding_check": "GRANT_SIGNATURE"}
+    },
+    {
+      "id": "sig-03", "family": "grant",
+      "name": "extending the expiry after signing breaks the signature",
+      "setup": [{"op": "tamper", "field": "expires_at", "value": "2099-01-01T00:00:00Z"}],
+      "request": {"amount_paise": 100000},
+      "expect": {"outcome": "DENY", "binding_check": "GRANT_SIGNATURE"}
+    },
+    {
+      "id": "sig-04", "family": "grant",
+      "name": "adding a merchant to the allowlist after signing breaks the signature",
+      "setup": [{"op": "tamper", "field": "allow_merchants", "value": ["mrc_demo_store", "mrc_attacker"]}],
+      "request": {"amount_paise": 100000, "merchant_id": "mrc_attacker"},
+      "expect": {"outcome": "DENY", "binding_check": "GRANT_SIGNATURE"}
+    },
+    {
+      "id": "sig-05", "family": "grant",
+      "name": "an unsigned grant is not a grant",
+      "setup": [{"op": "tamper", "field": "signature", "value": null}],
+      "request": {"amount_paise": 100000},
+      "expect": {"outcome": "DENY", "binding_check": "GRANT_SIGNATURE"}
+    },
+
+    {
+      "id": "window-01", "family": "grant",
+      "name": "expired by a day",
+      "request": {"amount_paise": 100000, "offset_seconds": 691200},
+      "expect": {"outcome": "DENY", "binding_check": "GRANT_WINDOW"}
+    },
+    {
+      "id": "window-02", "family": "boundary",
+      "name": "expired by one second",
+      "request": {"amount_paise": 100000, "offset_seconds": 604801},
+      "expect": {"outcome": "DENY", "binding_check": "GRANT_WINDOW"}
+    },
+    {
+      "id": "window-03", "family": "grant",
+      "name": "presented before it becomes valid",
+      "request": {"amount_paise": 100000, "offset_seconds": -172800},
+      "expect": {"outcome": "DENY", "binding_check": "GRANT_WINDOW"}
+    },
+    {
+      "id": "window-04", "family": "boundary",
+      "name": "one second before it becomes valid",
+      "request": {"amount_paise": 100000, "offset_seconds": -86401},
+      "expect": {"outcome": "DENY", "binding_check": "GRANT_WINDOW"}
+    },
+
+    {
+      "id": "revoked-01", "family": "grant",
+      "name": "a revoked grant refuses everything",
+      "setup": [{"op": "revoke", "reason": "user pressed revoke in the console"}],
+      "request": {"amount_paise": 100000},
+      "expect": {"outcome": "DENY", "binding_check": "GRANT_REVOKED"}
+    },
+    {
+      "id": "revoked-02", "family": "grant",
+      "name": "revocation beats a purchase that would otherwise be fine",
+      "setup": [{"op": "revoke", "reason": "card reported stolen"}],
+      "request": {"amount_paise": 1},
+      "expect": {"outcome": "DENY", "binding_check": "GRANT_REVOKED"}
+    },
+    {
+      "id": "revoked-03", "family": "grant",
+      "name": "revocation applies mid-flight, after an earlier purchase succeeded",
+      "setup": [
+        {"op": "ledger", "amount_paise": 100000, "minutes_ago": 30, "state": "captured"},
+        {"op": "revoke", "reason": "revoked live, mid-demo"}
+      ],
+      "request": {"amount_paise": 100000},
+      "expect": {"outcome": "DENY", "binding_check": "GRANT_REVOKED"}
+    },
+
+    {
+      "id": "agent-01", "family": "scope",
+      "name": "a different agent presenting the grant is refused",
+      "request": {"amount_paise": 100000, "agent_id": "agt_someone_else"},
+      "expect": {"outcome": "DENY", "binding_check": "AGENT_MATCH"}
+    },
+    {
+      "id": "agent-02", "family": "scope",
+      "name": "an empty agent id is refused",
+      "request": {"amount_paise": 100000, "agent_id": ""},
+      "expect": {"outcome": "DENY", "binding_check": "AGENT_MATCH"}
+    },
+    {
+      "id": "agent-03", "family": "scope",
+      "name": "a near-miss agent id is still a different agent",
+      "request": {"amount_paise": 100000, "agent_id": "agt_shopper_02"},
+      "expect": {"outcome": "DENY", "binding_check": "AGENT_MATCH"}
+    },
+    {
+      "id": "agent-04", "family": "scope",
+      "name": "case matters in an agent id",
+      "request": {"amount_paise": 100000, "agent_id": "AGT_SHOPPER_01"},
+      "expect": {"outcome": "DENY", "binding_check": "AGENT_MATCH"}
+    },
+
+    {
+      "id": "merchant-01", "family": "scope",
+      "name": "a merchant that is not on the allowlist",
+      "request": {"amount_paise": 100000, "merchant_id": "mrc_unknown_store"},
+      "expect": {"outcome": "DENY", "binding_check": "MERCHANT_ALLOWED"}
+    },
+    {
+      "id": "merchant-02", "family": "scope",
+      "name": "an explicitly denied merchant",
+      "request": {"amount_paise": 100000, "merchant_id": "mrc_blocked_store"},
+      "expect": {"outcome": "DENY", "binding_check": "MERCHANT_ALLOWED"}
+    },
+    {
+      "id": "merchant-03", "family": "scope",
+      "name": "an empty merchant id is not the allowed merchant",
+      "request": {"amount_paise": 100000, "merchant_id": ""},
+      "expect": {"outcome": "DENY", "binding_check": "MERCHANT_ALLOWED"}
+    },
+
+    {
+      "id": "category-01", "family": "scope",
+      "name": "an explicitly denied category",
+      "request": {"amount_paise": 50000, "category": "gambling"},
+      "expect": {"outcome": "DENY", "binding_check": "CATEGORY_ALLOWED"}
+    },
+    {
+      "id": "category-02", "family": "scope",
+      "name": "a category that is simply not on the allowlist",
+      "request": {"amount_paise": 50000, "category": "electronics"},
+      "expect": {"outcome": "DENY", "binding_check": "CATEGORY_ALLOWED"}
+    },
+    {
+      "id": "category-03", "family": "scope",
+      "name": "an empty category is not an allowed category",
+      "request": {"amount_paise": 50000, "category": ""},
+      "expect": {"outcome": "DENY", "binding_check": "CATEGORY_ALLOWED"}
+    },
+    {
+      "id": "category-04", "family": "scope",
+      "name": "a denied category is refused even for a tiny amount",
+      "request": {"amount_paise": 1, "category": "gambling"},
+      "expect": {"outcome": "DENY", "binding_check": "CATEGORY_ALLOWED"}
+    },
+
+    {
+      "id": "pertxn-01", "family": "limit",
+      "name": "one paise over the per-transaction cap",
+      "request": {"amount_paise": 500001},
+      "expect": {"outcome": "DENY", "binding_check": "PER_TXN_LIMIT"}
+    },
+    {
+      "id": "pertxn-02", "family": "limit",
+      "name": "far over the per-transaction cap",
+      "request": {"amount_paise": 5000000},
+      "expect": {"outcome": "DENY", "binding_check": "PER_TXN_LIMIT"}
+    },
+    {
+      "id": "pertxn-03", "family": "limit",
+      "name": "over the cap in an allowed category is still over the cap",
+      "request": {"amount_paise": 900000, "category": "software"},
+      "expect": {"outcome": "DENY", "binding_check": "PER_TXN_LIMIT"}
+    },
+
+    {
+      "id": "budget-01", "family": "budget",
+      "name": "captured spend consumes the budget",
+      "grant": {"step_up_above_paise": 2000000},
+      "setup": [{"op": "ledger", "amount_paise": 1800000, "minutes_ago": 120, "state": "captured"}],
+      "request": {"amount_paise": 300000},
+      "expect": {"outcome": "DENY", "binding_check": "BUDGET_REMAINING"}
+    },
+    {
+      "id": "budget-02", "family": "budget",
+      "name": "money still in flight is held against the budget, so two near-simultaneous purchases cannot both spend it",
+      "grant": {"step_up_above_paise": 2000000},
+      "setup": [{"op": "ledger", "amount_paise": 1800000, "minutes_ago": 2, "state": "authorised"}],
+      "request": {"amount_paise": 300000},
+      "expect": {"outcome": "DENY", "binding_check": "BUDGET_REMAINING"}
+    },
+    {
+      "id": "budget-03", "family": "budget",
+      "name": "captured plus in-flight together exceed the budget",
+      "grant": {"step_up_above_paise": 2000000, "max_transactions_per_window": 9},
+      "setup": [
+        {"op": "ledger", "amount_paise": 1000000, "minutes_ago": 120, "state": "captured"},
+        {"op": "ledger", "amount_paise": 900000, "minutes_ago": 3, "state": "authorised"}
+      ],
+      "request": {"amount_paise": 200000},
+      "expect": {"outcome": "DENY", "binding_check": "BUDGET_REMAINING"}
+    },
+    {
+      "id": "budget-04", "family": "boundary",
+      "name": "one paise over the remaining budget",
+      "grant": {"step_up_above_paise": 2000000},
+      "setup": [{"op": "ledger", "amount_paise": 1500000, "minutes_ago": 120, "state": "captured"}],
+      "request": {"amount_paise": 500001},
+      "expect": {"outcome": "DENY", "binding_check": "PER_TXN_LIMIT"}
+    },
+
+    {
+      "id": "velocity-01", "family": "velocity",
+      "name": "a third purchase inside the rolling hour is refused",
+      "setup": [
+        {"op": "ledger", "amount_paise": 50000, "minutes_ago": 10},
+        {"op": "ledger", "amount_paise": 50000, "minutes_ago": 20}
+      ],
+      "request": {"amount_paise": 50000},
+      "expect": {"outcome": "DENY", "binding_check": "VELOCITY"}
+    },
+    {
+      "id": "velocity-02", "family": "velocity",
+      "name": "two purchases that have aged out of the window free the slots again",
+      "setup": [
+        {"op": "ledger", "amount_paise": 50000, "minutes_ago": 70},
+        {"op": "ledger", "amount_paise": 50000, "minutes_ago": 80}
+      ],
+      "request": {"amount_paise": 50000},
+      "expect": {"outcome": "ALLOW", "binding_check": null}
+    },
+    {
+      "id": "velocity-03", "family": "boundary",
+      "name": "one inside the window and one outside leaves exactly one slot",
+      "setup": [
+        {"op": "ledger", "amount_paise": 50000, "minutes_ago": 30},
+        {"op": "ledger", "amount_paise": 50000, "minutes_ago": 90}
+      ],
+      "request": {"amount_paise": 50000},
+      "expect": {"outcome": "ALLOW", "binding_check": null}
+    },
+    {
+      "id": "velocity-04", "family": "velocity",
+      "name": "velocity is refused even when the amount is trivial",
+      "setup": [
+        {"op": "ledger", "amount_paise": 50000, "minutes_ago": 5},
+        {"op": "ledger", "amount_paise": 50000, "minutes_ago": 15}
+      ],
+      "request": {"amount_paise": 1},
+      "expect": {"outcome": "DENY", "binding_check": "VELOCITY"}
+    },
+    {
+      "id": "velocity-05", "family": "velocity",
+      "name": "a tighter velocity limit of one per window refuses the second",
+      "grant": {"max_transactions_per_window": 1},
+      "setup": [{"op": "ledger", "amount_paise": 50000, "minutes_ago": 10}],
+      "request": {"amount_paise": 50000},
+      "expect": {"outcome": "DENY", "binding_check": "VELOCITY"}
+    },
+
+    {
+      "id": "idem-01", "family": "replay",
+      "name": "the same request id with a different amount is a replay attack",
+      "setup": [{"op": "prior_request", "amount_paise": 100000}],
+      "request": {"amount_paise": 400000, "request_id": "req_same"},
+      "expect": {"outcome": "DENY", "binding_check": "IDEMPOTENCY"}
+    },
+    {
+      "id": "idem-02", "family": "replay",
+      "name": "the same request id with a different category is a replay attack",
+      "setup": [{"op": "prior_request", "amount_paise": 100000}],
+      "request": {"amount_paise": 100000, "category": "software", "request_id": "req_same"},
+      "expect": {"outcome": "DENY", "binding_check": "IDEMPOTENCY"}
+    },
+    {
+      "id": "idem-03", "family": "replay",
+      "name": "the same request id redirected to another in-scope merchant is still a replay attack",
+      "_note": "Both merchants are on the allowlist on purpose. If the second one were out of scope, MERCHANT_ALLOWED would bind first and this would stop testing idempotency at all.",
+      "grant": {"allow_merchants": ["mrc_demo_store", "mrc_second_store"]},
+      "setup": [{"op": "prior_request", "amount_paise": 100000}],
+      "request": {"amount_paise": 100000, "merchant_id": "mrc_second_store", "request_id": "req_same"},
+      "expect": {"outcome": "DENY", "binding_check": "IDEMPOTENCY"}
+    },
+    {
+      "id": "idem-04", "family": "replay",
+      "name": "an identical retry is honest and returns the original answer verbatim",
+      "setup": [{"op": "prior_request", "amount_paise": 100000}],
+      "request": {"amount_paise": 100000, "request_id": "req_same"},
+      "expect": {"outcome": "ALLOW", "binding_check": null, "replay": true}
+    },
+    {
+      "id": "idem-05", "family": "replay",
+      "name": "retrying a refusal returns the same refusal, it is not a second chance",
+      "setup": [{"op": "prior_request", "amount_paise": 900000}],
+      "request": {"amount_paise": 900000, "request_id": "req_same"},
+      "expect": {"outcome": "DENY", "binding_check": "PER_TXN_LIMIT", "replay": true}
+    },
+
+    {
+      "id": "injection-01", "family": "injection",
+      "name": "the seeded hostile listing at its real price is over the per-transaction cap",
+      "request": {"amount_paise": 12990000},
+      "expect": {"outcome": "DENY", "binding_check": "PER_TXN_LIMIT"}
+    },
+    {
+      "id": "injection-02", "family": "injection",
+      "name": "the hostile listing bought in the bulk quantity it asks for",
+      "request": {"amount_paise": 129900000},
+      "expect": {"outcome": "DENY", "binding_check": "PER_TXN_LIMIT"}
+    },
+    {
+      "id": "injection-03", "family": "injection",
+      "name": "an injected instruction cannot move a purchase into a denied category",
+      "request": {"amount_paise": 100000, "category": "gambling"},
+      "expect": {"outcome": "DENY", "binding_check": "CATEGORY_ALLOWED"}
+    },
+    {
+      "id": "injection-04", "family": "injection",
+      "name": "an injected instruction cannot redirect payment to another merchant",
+      "request": {"amount_paise": 100000, "merchant_id": "mrc_attacker"},
+      "expect": {"outcome": "DENY", "binding_check": "MERCHANT_ALLOWED"}
+    },
+
+    {
+      "id": "precedence-01", "family": "precedence",
+      "name": "a tampered grant binds on the signature before anything else is considered",
+      "setup": [{"op": "tamper", "field": "limits.per_transaction_paise", "value": 99999999}],
+      "request": {"amount_paise": 9000000, "agent_id": "agt_someone_else", "merchant_id": "mrc_blocked_store", "category": "gambling"},
+      "expect": {"outcome": "DENY", "binding_check": "GRANT_SIGNATURE"}
+    },
+    {
+      "id": "precedence-02", "family": "precedence",
+      "name": "an expired grant binds on the window before the wrong agent is considered",
+      "request": {"amount_paise": 100000, "agent_id": "agt_someone_else", "offset_seconds": 691200},
+      "expect": {"outcome": "DENY", "binding_check": "GRANT_WINDOW"}
+    },
+    {
+      "id": "precedence-03", "family": "precedence",
+      "name": "revocation binds before scope and limits",
+      "setup": [{"op": "revoke", "reason": "revoked"}],
+      "request": {"amount_paise": 9000000, "merchant_id": "mrc_blocked_store", "category": "gambling"},
+      "expect": {"outcome": "DENY", "binding_check": "GRANT_REVOKED"}
+    },
+    {
+      "id": "precedence-04", "family": "precedence",
+      "name": "the wrong agent binds before the wrong merchant",
+      "request": {"amount_paise": 100000, "agent_id": "agt_someone_else", "merchant_id": "mrc_blocked_store"},
+      "expect": {"outcome": "DENY", "binding_check": "AGENT_MATCH"}
+    },
+    {
+      "id": "precedence-05", "family": "precedence",
+      "name": "the wrong merchant binds before the wrong category",
+      "request": {"amount_paise": 100000, "merchant_id": "mrc_blocked_store", "category": "gambling"},
+      "expect": {"outcome": "DENY", "binding_check": "MERCHANT_ALLOWED"}
+    },
+    {
+      "id": "precedence-06", "family": "precedence",
+      "name": "the category binds before the per-transaction limit",
+      "request": {"amount_paise": 9000000, "category": "gambling"},
+      "expect": {"outcome": "DENY", "binding_check": "CATEGORY_ALLOWED"}
+    },
+    {
+      "id": "precedence-07", "family": "precedence",
+      "name": "the per-transaction limit binds before velocity",
+      "setup": [
+        {"op": "ledger", "amount_paise": 50000, "minutes_ago": 10},
+        {"op": "ledger", "amount_paise": 50000, "minutes_ago": 20}
+      ],
+      "request": {"amount_paise": 9000000},
+      "expect": {"outcome": "DENY", "binding_check": "PER_TXN_LIMIT"}
+    }
+  ]
+}

@@ -41,6 +41,52 @@ def _one_line(entry: dict) -> str:
     return f"  {entry['seq']:>4}  {entry['ts']}  {entry['type']:<18} {' '.join(bits)}"
 
 
+def _self_test() -> int:
+    """Prove the chain both verifies and *notices*, from nothing.
+
+    A verifier that always says VERIFIED is worse than no verifier, because
+    people believe it. So this builds a throwaway chain, checks it passes,
+    edits one past row the way an attacker would, and fails unless
+    verification catches it and names the right row.
+    """
+    import json as _json
+    import shutil
+    import tempfile
+
+    tmp = Path(tempfile.mkdtemp(prefix="ambit-chain-selftest-"))
+    try:
+        path = tmp / "audit.jsonl"
+        chain = AuditChain(path)
+        for i in range(6):
+            chain.append("DECISION", {"outcome": "ALLOW", "request_id": f"req_{i}", "n": i})
+
+        intact = chain.verify()
+        print(f"built {intact.entries_checked} entries")
+        if not intact.ok:
+            print("  FAILED: a freshly built chain did not verify")
+            return 1
+        print("  intact chain verifies")
+
+        # Edit a past row, leaving its recorded hash untouched.
+        rows = [_json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+        target = 2
+        rows[target]["payload"]["outcome"] = "DENY"
+        path.write_text(
+            "\n".join(_json.dumps(r, separators=(",", ":"), sort_keys=True) for r in rows) + "\n",
+            encoding="utf-8",
+        )
+
+        broken = AuditChain(path).verify()
+        if broken.ok:
+            print(f"  FAILED: entry {target} was edited and verification still passed")
+            return 1
+        print(f"  tampered entry {target} caught: BROKEN at {broken.broken_at_seq}")
+        print("\nself-test passed: the chain verifies when intact and breaks when edited")
+        return 0
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     use_utf8_stdout()
     parser = argparse.ArgumentParser(
@@ -49,7 +95,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--path", help="chain file (defaults to the configured data dir)")
     parser.add_argument("--show", type=int, default=0, help="print the last N entries")
     parser.add_argument("--json", action="store_true", help="machine-readable result")
+    parser.add_argument(
+        "--self-test",
+        action="store_true",
+        help="build a throwaway chain, verify it, corrupt a row, and prove the break is caught",
+    )
     args = parser.parse_args(argv)
+
+    if args.self_test:
+        return _self_test()
 
     settings = load_settings()
     path = Path(args.path) if args.path else settings.audit_chain_path
