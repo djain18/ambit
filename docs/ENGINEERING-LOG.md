@@ -229,3 +229,61 @@ beat, so it needs to work on camera.
   uses ngrok.
 - **`RAZORPAY_WEBHOOK_SECRET` and `AMBIT_PUBLIC_URL` are both empty** — set
   when the tunnel goes up.
+
+### Milestone 2 — OPEN ✅
+
+Catalog, checkout sessions, and a real end-to-end purchase. Run against the
+live Razorpay **test** API, not mocked:
+
+```
+POST /agent/checkout_sessions   -> preview: ALLOW, Rs 1,095
+POST .../complete               -> order_TYHLpT7xxOhwvZ
+                                   https://rzp.io/rzp/5BKyvdUh
+```
+
+That link is real and payable. The path from "an agent read a JSON catalog" to
+"a human-payable Razorpay link exists" now works, with all ten checks in
+between.
+
+### What broke: completing a session twice created two orders
+
+A test caught it, which is the only reason it is not still there:
+`test_an_allowed_cart_creates_exactly_one_order_even_if_completed_twice`.
+
+`IDEMPOTENCY` is one of the ten checks, and it worked exactly as designed — the
+second `complete` call got the original ALLOW back verbatim without
+re-deciding. Then the endpoint carried on past the decision and created a
+second Razorpay order anyway.
+
+**The mistaken assumption:** that making the *decision* idempotent made the
+*operation* idempotent. It does not. They are two different things, and the
+gap between them is precisely where a duplicate charge lives. A replayed ALLOW
+means "you already had permission", not "do it again."
+
+Razorpay's `X-Razorpay-Idempotency-Key` header was already being sent and
+would probably have absorbed it upstream. That is not a defence. Ambit was
+issuing two money writes and relying on someone else to notice — and the stub
+client in the test proved it, because a stub does not do you any favours.
+
+Fixed by making the session state authoritative for the write: a session that
+already holds an order returns that order and never reaches the payment API
+again. Logged to the chain as `COMPLETE_REPLAYED` so a replay is visible
+rather than silent.
+
+**The rule, generalised:** an idempotent decision and an idempotent side effect
+need separate guards. Check the state that records *the effect*, not the state
+that records the permission.
+
+### Also verified
+
+- The injection cart (100 × the trap product, ₹1,29,900) denies on
+  `PER_TXN_LIMIT`, and the stub proves **no order is created** — the payment
+  API is never reached at all.
+- Deny-listed category denies on `CATEGORY_ALLOWED`.
+- Revoking a grant over HTTP stops the very next purchase on `GRANT_REVOKED`.
+- STEP_UP holds: nothing is ordered while awaiting approval, and approval
+  re-runs all ten checks rather than waiving them.
+- Preview is free: six previews in a row leave `in_flight_paise` at 0 and the
+  ledger empty. Browsing cannot exhaust a grant.
+
+55 tests green.

@@ -193,6 +193,50 @@ class BoundEngine:
 
         return decision
 
+    def preview(self, grant: Grant, req: PurchaseRequest) -> Decision:
+        """Run the same ten checks, change nothing.
+
+        An agent gets to ask "would this be allowed?" before committing to it.
+        The preview burns no idempotency record, books no ledger row and holds
+        no budget - so browsing cannot exhaust a grant. It is still written to
+        the audit chain, because what an agent *considered* buying is part of
+        explaining what it did.
+        """
+        try:
+            checks = run_checks(grant, req, self.store, self.public_key)
+            failed = [c for c in checks if not c.passed]
+            if failed:
+                outcome, binding, reason = DENY, failed[0].code, failed[0].message
+            elif req.amount_paise > grant.step_up_above_paise:
+                outcome, binding, reason = (
+                    STEP_UP,
+                    STEP_UP_THRESHOLD,
+                    "would need a human to approve this amount",
+                )
+            else:
+                outcome, binding, reason = ALLOW, None, "would be allowed"
+            decision = Decision(
+                outcome=outcome,
+                binding_check=binding,
+                reason=reason,
+                grant_id=grant.grant_id,
+                request=req.as_dict(),
+                checks=checks,
+                decided_at=to_iso(req.now),
+            )
+        except Exception as exc:  # noqa: BLE001
+            decision = Decision(
+                outcome=DENY,
+                binding_check=INTERNAL_ERROR,
+                reason=f"preview failed: {type(exc).__name__}",
+                grant_id=getattr(grant, "grant_id", "unknown"),
+                request=req.as_dict(),
+                checks=[],
+                decided_at=to_iso(datetime.now(timezone.utc)),
+            )
+        self.chain.append("DECISION_PREVIEW", decision.as_dict())
+        return decision
+
     def _authorise(self, grant: Grant, req: PurchaseRequest, decision: Decision) -> None:
         """Reserve the slot. Budget is only truly spent on capture."""
         self.store.append_ledger(
