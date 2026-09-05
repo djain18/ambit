@@ -1,0 +1,176 @@
+/* ============================================================================
+   Ambit design tokens
+
+   Design read: technical infrastructure surface for engineers and reviewers.
+   High-contrast neutral language, light theme locked, native CSS, no build step.
+
+   Type      Archivo (display + UI), IBM Plex Mono (every machine-produced value)
+   Ground    cool zinc neutrals, deliberately NOT the warm beige/brass family
+   Accent    exactly one, #1d4ed8. Green/red/amber appear ONLY as decision state
+             (ALLOW / DENY / STEP_UP), which is semantic, not decoration.
+   Shape     locked sharp. Radius 0 everywhere. It is an instrument, not a card UI.
+   ========================================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap');
+
+:root{
+  --paper:     #fafafa;
+  --paper-2:   #f4f4f5;
+  --paper-3:   #e9e9ec;
+  --rule:      #d4d4d8;
+  --rule-soft: #e4e4e7;
+
+  --ink:   #18181b;
+  --ink-2: #3f3f46;
+  --ink-3: #71717a;
+  --ink-4: #a1a1aa;
+
+  /* the one accent */
+  --accent:    #1d4ed8;
+  --accent-bg: #e8eefc;
+
+  /* decision state, semantic only */
+  --allow:     #15803d;
+  --allow-bg:  #e7f4ec;
+  --deny:      #b91c1c;
+  --deny-bg:   #fbeaea;
+  --stepup:    #a16207;
+  --stepup-bg: #fbf1dc;
+
+  --sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* one easing curve for the whole site */
+  --ease: cubic-bezier(.32,.72,0,1);
+
+  --w: 1180px;
+  --r: 0px;
+}
+
+*{ box-sizing:border-box }
+html{ -webkit-text-size-adjust:100% }
+
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:15px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ---------------------------------------------------------------- type -- */
+h1,h2,h3{ font-family:var(--sans); font-weight:600; letter-spacing:-.028em; margin:0 }
+/* sizes land on the standard type scale: 36 / 48 / 60, 24 / 30 / 36, 18 */
+h1{ font-size:clamp(36px, 5.2vw, 60px); line-height:1.04 }
+h2{ font-size:clamp(24px, 3vw, 36px); line-height:1.12 }
+h3{ font-size:18px; line-height:1.28; letter-spacing:-.018em }
+p{ margin:0 0 1em }
+a{ color:var(--accent); text-underline-offset:3px }
+
+.mono{ font-family:var(--mono); font-variant-numeric:tabular-nums }
+.num { font-family:var(--mono); font-variant-numeric:tabular-nums; letter-spacing:-.02em }
+
+.rubric{
+  font-family:var(--mono); font-size:10.5px; font-weight:500;
+  letter-spacing:.15em; text-transform:uppercase; color:var(--ink-3);
+}
+.lede{ font-size:17px; line-height:1.6; color:var(--ink-2); max-width:62ch }
+.muted{ color:var(--ink-3) }
+.small{ font-size:13px }
+.tiny{ font-size:11.5px }
+.right{ text-align:right }
+.nowrap{ white-space:nowrap }
+.hide{ display:none !important }
+
+/* ---------------------------------------------------------------- shell -- */
+.wrap{ max-width:var(--w); margin:0 auto; padding:0 26px }
+
+.masthead{
+  position:sticky; top:0; z-index:50;
+  background:rgba(250,250,250,.93);
+  backdrop-filter:saturate(150%) blur(8px);
+  border-bottom:1px solid var(--rule);
+}
+.masthead .bar{
+  max-width:var(--w); margin:0 auto; padding:0 26px; height:64px;
+  display:flex; align-items:center; gap:16px;
+}
+.wordmark{
+  font-family:var(--sans); font-size:19px; font-weight:700;
+  letter-spacing:-.035em; text-decoration:none; color:var(--ink);
+}
+.strap{ font-size:12.5px; color:var(--ink-3); border-left:1px solid var(--rule); padding-left:15px }
+.grow{ flex:1 }
+
+/* ---------------------------------------------------------------- state -- */
+.tag{
+  display:inline-flex; align-items:center; gap:6px;
+  font-family:var(--mono); font-size:11px; font-weight:500; letter-spacing:.04em;
+  padding:3px 8px; border-radius:var(--r); border:1px solid currentColor;
+}
+.tag .pip{ width:5px; height:5px; border-radius:50%; background:currentColor }
+.tag.ALLOW  { color:var(--allow);  background:var(--allow-bg) }
+.tag.DENY   { color:var(--deny);   background:var(--deny-bg) }
+.tag.STEP_UP{ color:var(--stepup); background:var(--stepup-bg) }
+.tag.plain  { color:var(--ink-3);  background:var(--paper-2); border-color:var(--rule) }
+.tag.ok     { color:var(--allow);  background:var(--allow-bg) }
+.tag.bad    { color:var(--deny);   background:var(--deny-bg) }
+
+/* ---------------------------------------------------------------- button -- */
+.btn{
+  display:inline-flex; align-items:center; gap:8px; white-space:nowrap;
+  font-family:var(--sans); font-size:13.5px; font-weight:500;
+  padding:9px 16px; border-radius:var(--r); cursor:pointer; text-decoration:none;
+  border:1px solid var(--ink); background:transparent; color:var(--ink);
+  transition:background .14s ease, color .14s ease, border-color .14s ease;
+}
+.btn:hover{ background:var(--paper-3) }
+.btn:active{ transform:translateY(1px) }
+.btn.solid{ background:var(--ink); color:var(--paper); border-color:var(--ink) }
+.btn.solid:hover{ background:#000 }
+.btn.accent{ background:var(--accent); border-color:var(--accent); color:#fff }
+.btn.accent:hover{ background:#1a45c0 }
+.btn.danger{ border-color:var(--deny); color:var(--deny); background:transparent }
+.btn.danger:hover{ background:var(--deny-bg) }
+.btn.sm{ font-size:12px; padding:6px 11px }
+.btn:disabled{ opacity:.45; cursor:not-allowed }
+
+/* ---------------------------------------------------------------- panel -- */
+.panel{ border:1px solid var(--rule); background:#fff; margin-bottom:18px; border-radius:var(--r) }
+.panel > header{
+  display:flex; align-items:center; gap:12px;
+  padding:11px 15px; border-bottom:1px solid var(--rule); background:var(--paper-2);
+}
+.panel .pad{ padding:17px }
+
+/* ---------------------------------------------------------------- table -- */
+table{ width:100%; border-collapse:collapse }
+thead th{
+  text-align:left; padding:9px 15px; border-bottom:1px solid var(--rule);
+  font-family:var(--mono); font-size:10.5px; font-weight:500; letter-spacing:.11em;
+  text-transform:uppercase; color:var(--ink-3); background:var(--paper-2); white-space:nowrap;
+}
+tbody td{ padding:12px 15px; border-bottom:1px solid var(--rule-soft); vertical-align:top }
+tbody tr:last-child td{ border-bottom:0 }
+tbody tr.click{ cursor:pointer }
+tbody tr.click:hover{ background:var(--paper-2) }
+
+/* ---------------------------------------------------------------- misc -- */
+.chip{
+  display:inline-block; font-family:var(--mono); font-size:11px;
+  padding:2px 7px; border:1px solid var(--rule); background:var(--paper-2);
+  color:var(--ink-2); border-radius:var(--r);
+}
+.chip.no{ border-color:#e6b9b9; background:var(--deny-bg); color:var(--deny) }
+.empty{ padding:26px 15px; text-align:center; color:var(--ink-3); font-size:13.5px }
+.err{
+  border:1px solid var(--deny); background:var(--deny-bg); color:#8f1717;
+  padding:12px 14px; margin-bottom:18px; font-size:13.5px; border-radius:var(--r);
+}
+:focus-visible{ outline:2px solid var(--accent); outline-offset:2px }
+
+@media (prefers-reduced-motion: reduce){
+  *{ animation:none !important; transition:none !important; scroll-behavior:auto !important }
+}

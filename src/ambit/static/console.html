@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Console · Ambit</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2318181b'/%3E%3Crect x='7' y='14.6' width='18' height='2.8' fill='%23fafafa'/%3E%3Crect x='7' y='8' width='18' height='2.8' fill='%231d4ed8'/%3E%3Crect x='7' y='21.2' width='11' height='2.8' fill='%2371717a'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/ambit.css">
+<style>
+  nav.tabs{ border-bottom:1px solid var(--rule); background:var(--paper) }
+  nav.tabs .inner{ max-width:var(--w); margin:0 auto; padding:0 26px; display:flex; gap:0 }
+  nav.tabs button{
+    background:none; border:0; border-bottom:2px solid transparent; cursor:pointer;
+    font-family:var(--sans); font-size:13.5px; font-weight:500; color:var(--ink-3);
+    padding:12px 18px 10px;
+  }
+  nav.tabs button:hover{ color:var(--ink) }
+  nav.tabs button[aria-selected="true"]{ color:var(--ink); border-bottom-color:var(--accent) }
+  nav.tabs .k{ font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; margin-right:8px; color:var(--ink-4) }
+  nav.tabs button[aria-selected="true"] .k{ color:var(--accent) }
+
+  main{ max-width:var(--w); margin:0 auto; padding:24px 26px 60px }
+  .intro{ font-size:14px; color:var(--ink-2); max-width:70ch; margin:0 0 20px }
+
+  /* ten checks */
+  .checks{ display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); gap:6px }
+  .chk{ display:flex; gap:9px; align-items:flex-start; padding:8px 10px; border:1px solid var(--rule-soft); background:var(--paper-2) }
+  .chk .mk{ font-family:var(--mono); font-weight:600; line-height:1.35 }
+  .chk.pass .mk{ color:var(--allow) }
+  .chk.fail{ border-color:#e6b9b9; background:var(--deny-bg) }
+  .chk.fail .mk{ color:var(--deny) }
+  .chk .code{ font-family:var(--mono); font-size:11.5px; font-weight:500 }
+  .chk .msg{ color:var(--ink-3); font-size:11.5px; margin-top:1px }
+  .bind{ font-family:var(--mono); font-size:9.5px; font-weight:600; color:var(--deny);
+         border:1px solid #e6b9b9; padding:1px 5px; margin-left:6px; letter-spacing:.05em }
+
+  /* grants */
+  .grant{ border:1px solid var(--rule); background:#fff; margin-bottom:14px }
+  .grant.revoked{ background:var(--paper-2) }
+  .grant.revoked .gid{ text-decoration:line-through; text-decoration-thickness:1px; color:var(--ink-3) }
+  .ghead{ display:flex; align-items:center; gap:11px; flex-wrap:wrap; padding:13px 15px; border-bottom:1px solid var(--rule) }
+  .gid{ font-family:var(--mono); font-size:13.5px; font-weight:500 }
+  .gbody{ padding:15px }
+  .bar{ height:6px; background:var(--paper-3); display:flex; margin:8px 0 5px }
+  .bar i{ display:block; height:100% }
+  .bar .cap{ background:var(--allow) } .bar .fly{ background:var(--stepup) }
+  .kv{ display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; margin-top:15px;
+       border-top:1px solid var(--rule-soft); padding-top:14px }
+  .kv .k{ font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3) }
+  .kv .v{ font-family:var(--mono); font-size:13px; margin-top:2px }
+  .chips{ display:flex; gap:5px; flex-wrap:wrap; margin-top:5px }
+
+  /* metrics */
+  .tiles{ display:grid; grid-template-columns:repeat(4,1fr); gap:0; border:1px solid var(--rule); background:#fff }
+  .tile{ padding:15px; border-right:1px solid var(--rule-soft); border-bottom:1px solid var(--rule-soft) }
+  .tile:nth-child(4n){ border-right:0 }
+  .tile .n{ font-family:var(--mono); font-size:26px; font-weight:500; letter-spacing:-.03em; line-height:1.1 }
+  .tile .l{ font-family:var(--mono); font-size:10px; letter-spacing:.11em; text-transform:uppercase; color:var(--ink-3); margin-top:4px }
+  .tile.g .n{ color:var(--allow) } .tile.r .n{ color:var(--deny) } .tile.a .n{ color:var(--stepup) }
+  .tile .n.money{ font-size:17px }
+  @media (max-width:720px){ .tiles{ grid-template-columns:repeat(2,1fr) } .tile:nth-child(2n){ border-right:0 } }
+
+  .bd div{ display:flex; align-items:center; gap:11px; margin-bottom:6px; font-size:12.5px }
+  .bd .lb{ font-family:var(--mono); font-size:11px; width:215px; flex:none; color:var(--ink-2) }
+  .bd .track{ flex:1; height:5px; background:var(--paper-3) }
+  .bd .track i{ display:block; height:100%; background:var(--accent) }
+  .bd .ct{ width:22px; text-align:right; font-family:var(--mono); font-size:12px }
+
+  /* diagnosis */
+  .diag{ border:1px solid var(--rule); background:#fff; padding:16px; margin-bottom:16px }
+  .diag.warn{ border-color:var(--deny) }
+  .diag .cls{ font-family:var(--mono); font-size:15px; font-weight:600; display:flex; align-items:center; gap:10px; flex-wrap:wrap }
+  .diag .row{ margin-top:9px; font-size:13px; display:flex; gap:14px }
+  .diag .row b{ font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase;
+                color:var(--ink-3); font-weight:500; width:104px; flex:none; padding-top:3px }
+  .diag .row span{ flex:1 }
+
+  .tl{ position:relative; padding-left:19px }
+  .tl:before{ content:""; position:absolute; left:3px; top:6px; bottom:6px; width:1px; background:var(--rule) }
+  .ev{ position:relative; padding-bottom:14px }
+  .ev:before{ content:""; position:absolute; left:-19px; top:6px; width:7px; height:7px; background:var(--accent) }
+  .ev .lbl{ font-size:13.5px; font-weight:500 }
+  .ev .meta{ font-family:var(--mono); font-size:11px; color:var(--ink-3); margin-top:2px }
+
+  /* chain */
+  .chain{ font-family:var(--mono); font-size:12px }
+  .chain .e{ display:flex; gap:14px; padding:6px 0; border-bottom:1px solid var(--rule-soft); align-items:baseline }
+  .chain .e:last-child{ border-bottom:0 }
+  .chain .sq{ color:var(--ink-4); width:32px; flex:none; text-align:right }
+  .chain .ty{ width:168px; flex:none; font-weight:500 }
+  .chain .tm{ width:72px; flex:none; color:var(--ink-3) }
+  .chain .hs{ color:var(--ink-4); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+  .verdict{ padding:12px 14px; margin-bottom:13px; font-size:13.5px; display:none; border:1px solid }
+  .verdict.ok{ background:var(--allow-bg); border-color:var(--allow); color:#0f5c2e; display:block }
+  .verdict.bad{ background:var(--deny-bg); border-color:var(--deny); color:#8f1717; display:block }
+  .note{ color:var(--ink-3); font-size:11.5px; margin-top:12px; line-height:1.55 }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="bar">
+    <a class="wordmark" href="/">Ambit</a>
+    <span class="strap">Merchant console</span>
+    <span class="grow"></span>
+    <span class="tag plain" id="p-mode"><span class="pip"></span><span>checking</span></span>
+    <span class="tag plain" id="p-chain"><span class="pip"></span><span>chain</span></span>
+    <button class="btn sm" onclick="refresh()">Refresh</button>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <div class="inner">
+    <button role="tab" aria-selected="true"  id="t-open"    onclick="tab('open')"><span class="k">01</span>Sessions</button>
+    <button role="tab" aria-selected="false" id="t-bound"   onclick="tab('bound')"><span class="k">02</span>Grants</button>
+    <button role="tab" aria-selected="false" id="t-explain" onclick="tab('explain')"><span class="k">03</span>Record</button>
+  </div>
+</nav>
+
+<main>
+  <div id="err-box"></div>
+
+  <section id="s-open">
+    <p class="intro">Every checkout an agent has opened against this merchant. Click a row for the
+      cart it built and all ten checks that ran on it.</p>
+    <div class="panel">
+      <header><span class="rubric">Agent sessions</span><span class="rubric" id="n-sessions"></span></header>
+      <table>
+        <thead><tr>
+          <th>Session</th><th>Agent</th><th>Cart</th><th class="right">Total</th>
+          <th>Decision</th><th>Bound by</th><th>State</th>
+        </tr></thead>
+        <tbody id="tb-sessions"><tr><td colspan="7" class="empty">Loading</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="s-bound" class="hide">
+    <p class="intro">What each agent may spend. Ten checks run on every purchase in a fixed order,
+      all of them every time, so a denial reports everything that failed rather than only the first
+      thing. Revoking takes effect on the very next decision.</p>
+    <div id="grants"><div class="empty">Loading</div></div>
+  </section>
+
+  <section id="s-explain" class="hide">
+    <p class="intro">What the agents did, what was refused, and proof the record has not been
+      edited since it was written.</p>
+
+    <div class="tiles" id="tiles"></div>
+    <p class="note" id="stopped-note"></p>
+
+    <div class="panel" style="margin-top:20px">
+      <header><span class="rubric">Why things were refused</span></header>
+      <div class="pad bd" id="breakdown"></div>
+    </div>
+
+    <div class="panel">
+      <header>
+        <span class="rubric">Session diagnosis</span>
+        <span class="grow"></span>
+        <select id="pick" onchange="showSession(this.value)"
+          style="font-family:var(--mono);font-size:12px;padding:5px 8px;border:1px solid var(--rule);background:#fff;border-radius:0"></select>
+      </header>
+      <div class="pad" id="detail"><div class="empty">Pick a session.</div></div>
+    </div>
+
+    <div class="panel">
+      <header>
+        <span class="rubric">Tamper-evident record</span>
+        <span class="grow"></span>
+        <button class="btn sm accent" onclick="verify()">Verify integrity</button>
+      </header>
+      <div class="pad">
+        <div class="verdict" id="verdict"></div>
+        <div class="chain" id="chain"></div>
+        <p class="note">Each entry hashes the one before it:
+          <span class="mono">sha256(prev_hash &#8214; canonical_json(entry))</span>.
+          Edit any past row and verification fails at that row and every row after it.
+          <span class="mono">python execution/verify_audit_chain.py</span> does the same walk and exits 1.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+let SESSIONS = [], GRANTS = [], METRICS = null, CHAIN = null, OPENROW = null;
+
+const rupee = p => "₹" + (p/100).toLocaleString("en-IN",{minimumFractionDigits:2, maximumFractionDigits:2});
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const clock = t => t ? new Date(t).toLocaleTimeString("en-IN",{hour12:false}) : "—";
+const shortid = s => esc(String(s||"").slice(0,18));
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const body = await r.json().catch(() => null);
+  if (!r.ok) throw new Error((body && body.error && body.error.message) || (r.status + " " + path));
+  return body;
+}
+function fail(msg) {
+  document.getElementById("err-box").innerHTML =
+    '<div class="err"><b>Could not reach the API.</b> ' + esc(msg) +
+    '<br><span class="small">Is the server up? <span class="mono">PYTHONPATH=src python -m uvicorn ambit.app:app --port 8000</span></span></div>';
+}
+
+function tab(name) {
+  for (const n of ["open","bound","explain"]) {
+    document.getElementById("s-"+n).classList.toggle("hide", n !== name);
+    document.getElementById("t-"+n).setAttribute("aria-selected", String(n === name));
+  }
+}
+
+async function refresh() {
+  try {
+    document.getElementById("err-box").innerHTML = "";
+    const [s, g, m, c, h] = await Promise.all([
+      api("/explain/sessions?limit=100"), api("/bound/grants"), api("/explain/metrics"),
+      api("/explain/chain?limit=200"), api("/healthz"),
+    ]);
+    SESSIONS = s.sessions || []; GRANTS = g.grants || []; METRICS = m; CHAIN = c;
+    header(h, m); drawSessions(); drawGrants(); drawMetrics(); drawChain(); fillPicker();
+  } catch (e) { fail(e.message); }
+}
+
+function header(h, m) {
+  const mode = document.getElementById("p-mode");
+  mode.className = "tag " + (h.test_mode_enforced ? "ok" : "bad");
+  mode.lastElementChild.textContent = h.test_mode_enforced ? "test mode" : "TEST MODE OFF";
+  const ch = m.chain || {};
+  const p = document.getElementById("p-chain");
+  p.className = "tag " + (ch.ok ? "ok" : "bad");
+  p.lastElementChild.textContent = ch.ok ? ("chain ok / " + ch.entries_checked) : ("CHAIN BROKEN #" + ch.broken_at_seq);
+}
+
+function drawSessions() {
+  document.getElementById("n-sessions").textContent = SESSIONS.length || "";
+  const tb = document.getElementById("tb-sessions");
+  if (!SESSIONS.length) { tb.innerHTML = '<tr><td colspan="7" class="empty">No agent has shopped yet.</td></tr>'; return; }
+  tb.innerHTML = SESSIONS.map((s, i) => {
+    const d = s.decision || s.preview || {}, cart = s.cart || {}, n = (cart.lines || []).length;
+    return `<tr class="click" onclick="toggleRow(${i})">
+      <td class="mono nowrap">${shortid(s.session_id)}<div class="muted tiny">${clock(s.created_at)}</div></td>
+      <td class="mono small">${esc(s.agent_id)}</td>
+      <td>${n} item${n===1?"":"s"}<div class="muted tiny">${esc((cart.lines||[]).map(l=>l.title).join(", ")).slice(0,56)}</div></td>
+      <td class="right mono nowrap">${rupee(cart.total_paise || 0)}</td>
+      <td>${d.outcome ? `<span class="tag ${esc(d.outcome)}">${esc(d.outcome)}</span>` : '<span class="muted">—</span>'}</td>
+      <td class="mono small">${esc(d.binding_check || "—")}</td>
+      <td class="small muted">${esc(s.state)}</td>
+    </tr>
+    <tr id="row-${i}" class="hide"><td colspan="7" style="background:var(--paper-2)">${rowDetail(s, d)}</td></tr>`;
+  }).join("");
+}
+
+function rowDetail(s, d) {
+  const lines = (s.cart && s.cart.lines) || [];
+  const cart = lines.map(l =>
+    `<div class="small" style="display:flex;gap:10px;padding:3px 0">
+       <span class="mono muted" style="width:152px">${esc(l.sku)}</span>
+       <span style="flex:1">${esc(l.title)}</span>
+       <span class="muted">x${l.quantity}</span>
+       <span class="mono">${rupee(l.line_total_paise)}</span></div>`).join("");
+  const checks = (d.checks || []).map(c =>
+    `<div class="chk ${c.passed ? "pass" : "fail"}">
+       <span class="mk">${c.passed ? "✓" : "✕"}</span>
+       <span><span class="code">${esc(c.code)}</span>${c.code === d.binding_check ? '<span class="bind">BOUND</span>' : ""}
+       <div class="msg">${esc(c.message)}</div></span></div>`).join("");
+  return `<div style="padding:6px 0 4px">
+      <div class="rubric" style="margin-bottom:6px">Cart the agent built</div>
+      ${cart || '<div class="muted small">empty</div>'}
+      <div class="rubric" style="margin:15px 0 7px">The ten checks${d.outcome ? " / decided " + esc(d.outcome) : ""}</div>
+      <div class="checks">${checks || '<div class="muted small">not decided yet</div>'}</div></div>`;
+}
+
+function toggleRow(i) {
+  const r = document.getElementById("row-" + i);
+  if (OPENROW !== null && OPENROW !== i) document.getElementById("row-" + OPENROW).classList.add("hide");
+  r.classList.toggle("hide");
+  OPENROW = r.classList.contains("hide") ? null : i;
+}
+
+function drawGrants() {
+  const el = document.getElementById("grants");
+  if (!GRANTS.length) { el.innerHTML = '<div class="empty">No grants issued.</div>'; return; }
+  el.innerHTML = GRANTS.map(g => {
+    const L = g.limits || {}, total = L.total_paise || 1;
+    const capPct = Math.min(100, 100 * (g.captured_paise || 0) / total);
+    const flyPct = Math.min(100 - capPct, 100 * (g.in_flight_paise || 0) / total);
+    return `<div class="grant ${g.revoked ? "revoked" : ""}">
+      <div class="ghead">
+        <span class="gid">${esc(g.grant_id)}</span>
+        <span class="tag ${g.signature_verifies ? "ok" : "bad"}"><span class="pip"></span>${g.signature_verifies ? "signature verifies" : "SIGNATURE INVALID"}</span>
+        ${g.revoked
+          ? `<span class="tag bad"><span class="pip"></span>revoked${g.revocation && g.revocation.reason ? ": " + esc(g.revocation.reason) : ""}</span>`
+          : `<span class="tag ok"><span class="pip"></span>active</span>`}
+        <span class="grow"></span>
+        ${g.revoked ? "" : `<button class="btn sm danger" onclick="revoke('${esc(g.grant_id)}')">Revoke now</button>`}
+      </div>
+      <div class="gbody">
+        <div style="display:flex;justify-content:space-between;font-size:12.5px">
+          <span class="rubric">Budget used</span>
+          <span class="mono">${rupee(g.captured_paise||0)} captured${g.in_flight_paise ? ' plus ' + rupee(g.in_flight_paise) + ' in flight' : ""}
+            <span class="muted">of ${rupee(L.total_paise||0)}</span></span>
+        </div>
+        <div class="bar"><i class="cap" style="width:${capPct}%"></i><i class="fly" style="width:${flyPct}%"></i></div>
+        <div class="muted small">${rupee(g.remaining_paise||0)} remaining</div>
+        <div class="kv">
+          <div><div class="k">Agent</div><div class="v">${esc(g.agent_id)}</div></div>
+          <div><div class="k">Principal</div><div class="v">${esc(g.principal)}</div></div>
+          <div><div class="k">Per transaction</div><div class="v">${rupee(L.per_transaction_paise||0)}</div></div>
+          <div><div class="k">Step up above</div><div class="v">${rupee(g.step_up_above_paise||0)}</div></div>
+          <div><div class="k">Velocity</div><div class="v">${L.max_transactions_per_window}/${Math.round((L.velocity_window_seconds||0)/60)}min</div></div>
+          <div><div class="k">Per day</div><div class="v">${L.max_transactions_per_day}</div></div>
+          <div><div class="k">Expires</div><div class="v">${esc((g.expires_at||"").slice(0,16).replace("T"," "))}</div></div>
+          <div><div class="k">Transactions</div><div class="v">${(g.transactions||[]).length}</div></div>
+        </div>
+        <div style="margin-top:14px">
+          <div class="rubric">Scope</div>
+          <div class="chips">
+            ${((g.allow||{}).merchants||[]).map(m=>`<span class="chip">${esc(m)}</span>`).join("")}
+            ${((g.allow||{}).categories||[]).map(c=>`<span class="chip">${esc(c)}</span>`).join("")}
+            ${((g.deny||{}).categories||[]).map(c=>`<span class="chip no">denied: ${esc(c)}</span>`).join("")}
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+async function revoke(id) {
+  if (!confirm("Revoke " + id + "?\n\nEvery future decision on this grant denies on GRANT_REVOKED. This is written to the audit record and cannot be undone.")) return;
+  try {
+    const r = await api("/bound/grants/" + id + "/revoke", {
+      method: "POST", headers: {"content-type": "application/json"},
+      body: JSON.stringify({reason: "revoked from the console"}),
+    });
+    await refresh();
+    alert(id + " revoked.\n\n" + r.effect);
+  } catch (e) { fail(e.message); }
+}
+
+function drawMetrics() {
+  const m = METRICS;
+  document.getElementById("tiles").innerHTML = `
+    <div class="tile"><div class="n">${m.attempted}</div><div class="l">Attempted</div></div>
+    <div class="tile g"><div class="n">${m.allowed}</div><div class="l">Allowed</div></div>
+    <div class="tile r"><div class="n">${m.denied}</div><div class="l">Denied</div></div>
+    <div class="tile a"><div class="n">${m.stepped_up}</div><div class="l">Stepped up</div></div>
+    <div class="tile"><div class="n money">${esc(m.money_moved)}</div><div class="l">Money moved</div></div>
+    <div class="tile r"><div class="n money">${esc(m.money_stopped)}</div><div class="l">Money stopped</div></div>
+    <div class="tile ${m.unresolved_count ? "a" : ""}"><div class="n">${m.unresolved_count}</div><div class="l">Unresolved</div></div>
+    <div class="tile"><div class="n">${(m.chain||{}).entries_checked ?? 0}</div><div class="l">Record entries</div></div>`;
+  document.getElementById("stopped-note").textContent = m.note || "";
+
+  const rows = (obj, title) => {
+    const keys = Object.keys(obj || {});
+    if (!keys.length) return "";
+    // Scale against the group total, not the max: with every value equal, a
+    // max-scaled bar is 100% wide for all of them and says nothing.
+    const sum = keys.reduce((a, k) => a + obj[k], 0) || 1;
+    return `<div class="rubric" style="margin:4px 0 9px">${title}</div>` +
+      keys.map(k => `<div><span class="lb">${esc(k)}</span>
+        <span class="track"><i style="width:${Math.max(4, 100*obj[k]/sum)}%"></i></span>
+        <span class="ct">${obj[k]}</span></div>`).join("");
+  };
+  document.getElementById("breakdown").innerHTML =
+    (rows(METRICS.denials_by_check, "By the check that bound the decision") +
+     rows(METRICS.failures_by_class, "By failure class")) ||
+    '<div class="empty">Nothing refused yet.</div>';
+}
+
+function fillPicker() {
+  const p = document.getElementById("pick");
+  p.innerHTML = SESSIONS.map(s => {
+    const d = s.decision || s.preview || {};
+    return `<option value="${esc(s.session_id)}">${shortid(s.session_id)} / ${esc(d.outcome||s.state)}${d.binding_check ? " / " + esc(d.binding_check) : ""}</option>`;
+  }).join("");
+  const inj = SESSIONS.find(s => ((s.decision||s.preview||{}).binding_check) === "PER_TXN_LIMIT");
+  const pick = inj ? inj.session_id : (SESSIONS[0] && SESSIONS[0].session_id);
+  if (pick) { p.value = pick; showSession(pick); }
+}
+
+async function showSession(id) {
+  if (!id) return;
+  try {
+    const s = await api("/explain/sessions/" + id);
+    const c = s.classification || {}, r = s.recovery || {}, ev = c.evidence || {};
+    const warn = c.recoverability === "POLICY";
+    const extra = Object.entries(ev)
+      .filter(([k]) => !["binding_check","amount_paise"].includes(k))
+      .map(([k,v]) => `<div class="row"><b>${esc(k.replace(/_/g," "))}</b><span class="mono small">${esc(Array.isArray(v)?v.join("  "):v)}</span></div>`)
+      .join("");
+    document.getElementById("detail").innerHTML = `
+      <div class="diag ${warn ? "warn" : ""}">
+        <div class="cls">${esc(c.code || "—")}<span class="tag ${esc(s.outcome)}">${esc(s.outcome)}</span></div>
+        <div class="row"><b>Blame</b><span>${esc(c.blame || "—")}</span></div>
+        <div class="row"><b>Detail</b><span>${esc(c.detail || "—")}</span></div>
+        <div class="row"><b>Class</b><span class="mono small">${esc(c.recoverability||"—")}${c.retryable ? "" : ", not retryable"}</span></div>
+        ${extra}
+        <div class="row"><b>Recovery</b><span><span class="mono">${esc(r.action||"—")}</span>${r.terminal ? ", terminal" : ""}
+          <div class="muted small" style="margin-top:3px">${esc(r.reason||"")}</div></span></div>
+        <div class="row"><b>Attempts</b><span class="mono small">${r.attempts_made||0} made, ${r.attempts_remaining||0} remaining</span></div>
+      </div>
+      <div class="tl">${(s.timeline||[]).map(t => `
+        <div class="ev"><div class="lbl">${esc(t.label)}</div>
+          <div class="meta">${clock(t.at)} ${esc(JSON.stringify(t.detail||{}))}</div></div>`).join("")}</div>`;
+  } catch (e) { fail(e.message); }
+}
+
+function drawChain() {
+  const es = CHAIN.entries || [];
+  document.getElementById("chain").innerHTML = es.slice().reverse().map(e =>
+    `<div class="e"><span class="sq">${e.seq}</span><span class="ty">${esc(e.type)}</span>
+      <span class="tm">${clock(e.ts)}</span>
+      <span class="hs">${esc((e.hash||"").slice(0,30))}</span></div>`).join("")
+    || '<div class="empty">Record is empty.</div>';
+}
+
+async function verify() {
+  const v = document.getElementById("verdict");
+  try {
+    const r = await api("/explain/verify");
+    const ok = r.ok !== undefined ? r.ok : (r.chain && r.chain.ok);
+    const n  = r.entries_checked !== undefined ? r.entries_checked : (r.chain && r.chain.entries_checked);
+    if (ok) {
+      v.className = "verdict ok";
+      v.innerHTML = `<b>VERIFIED.</b> Re-walked ${n} entries. Every hash matches the entry before it, so nothing has been edited since it was written.`;
+    } else {
+      const at = r.broken_at_seq !== undefined ? r.broken_at_seq : (r.chain && r.chain.broken_at_seq);
+      v.className = "verdict bad";
+      v.innerHTML = `<b>BROKEN at entry ${at}.</b> ${esc(r.reason || (r.chain && r.chain.reason) || "hash mismatch")}. The record has been altered.`;
+    }
+    await refresh();
+  } catch (e) { fail(e.message); }
+}
+
+refresh();
+setInterval(refresh, 15000);
+</script>
+</body>
+</html>

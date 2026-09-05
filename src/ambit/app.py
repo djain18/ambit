@@ -19,10 +19,12 @@ from typing import Any
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from ambit.bound.checks import PurchaseRequest
 from ambit.bound.decide import ALLOW, DENY, STEP_UP
 from ambit.bound.grant import to_iso, utc_now
+from ambit.console import STATIC, console_router
 from ambit.open import catalog
 from ambit.open.catalog import CartError, build_cart
 from ambit.explain.report import explain_session, metrics
@@ -538,6 +540,8 @@ def create_app() -> FastAPI:
     app.include_router(bound_router)
     app.include_router(explain_router)
     app.include_router(webhook_router)
+    app.include_router(console_router)
+    app.mount("/static", StaticFiles(directory=STATIC), name="static")
     return app
 
 
