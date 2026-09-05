@@ -48,6 +48,48 @@ argument.
 
 ---
 
+## 1a. Who is who: the merchant, the principal, and the agent
+
+Three roles appear throughout, and confusing any two of them makes the rest of
+this document read as pointless. They are deliberately separate in the data
+model even though the demo, for simplicity, collapses two of them into one
+person.
+
+- **The merchant** is the shop. Ambit is installed *by* the merchant, *on*
+  their own storefront — in [`grant.py`](../src/ambit/bound/grant.py) this is
+  `allow_merchants`, and in the demo it is the single store `mrc_demo_store`.
+- **The principal** is whoever owns the money and signs the grant —
+  `grant.principal`. In real use this is **the customer**, not the merchant.
+  A customer's own AI shopping assistant would be handed a grant by the
+  customer (or a platform acting on the customer's behalf): a budget, an
+  expiry, and a list of merchants they trust — which may include this shop
+  among others.
+- **The agent** is the AI doing the shopping on the principal's behalf —
+  `grant.agent_id`. It reaches the merchant only through OPEN, and everything
+  it does is bounded by BOUND against the principal's grant, never the
+  merchant's own preferences.
+
+**Installing Ambit does not make a merchant's own AI buy from itself.** That
+would be pointless, and it is not the product. Installing Ambit makes a
+merchant **reachable by other people's AI agents, safely** — the same way
+installing a card machine does not give a shop its own card, it lets it accept
+*anyone's* card. Before installation, even a customer who wants their AI to
+spend a bounded ₹15,000 at this shop cannot do it safely: an ordinary checkout
+has no concept of a signed spending limit, no way to prove the amount charged
+matches what the customer authorised, and no way to tell a human's click from
+an agent's API call. After installation, the shop can read a grant, enforce
+it, and prove afterwards that it did.
+
+**The demo issues its one grant to `user_daksh` and restricts it to
+`mrc_demo_store` — the same person as both principal and merchant.** That is a
+deliberate simplification for a single-operator demo, not the intended
+production shape, and it is named here so a reader does not have to
+reconstruct it: in real use the principal is the customer, and the value to
+the merchant is being one of the shops that principal's grant is allowed to
+name.
+
+---
+
 ## 2. Where a model is used, and where it deliberately is not
 
 This is the section the rest of the design answers to.
