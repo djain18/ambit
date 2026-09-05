@@ -25,6 +25,7 @@ from ambit.bound.decide import ALLOW, DENY, STEP_UP
 from ambit.bound.grant import to_iso, utc_now
 from ambit.open import catalog
 from ambit.open.catalog import CartError, build_cart
+from ambit.explain.report import explain_session, metrics
 from ambit.open.sessions import CheckoutSession, new_session_id
 from ambit.razorpay_client import RazorpayError, verify_webhook_signature
 from ambit.runtime import Runtime, get_runtime
@@ -486,6 +487,26 @@ def verify_chain() -> dict[str, Any]:
 def list_sessions(limit: int = 50) -> dict[str, Any]:
     rt = get_runtime()
     return {"sessions": [s.as_dict() for s in rt.sessions.list(limit)]}
+
+
+@explain_router.get("/sessions/{session_id}")
+def explain_one_session(session_id: str) -> Any:
+    """What the agent did, why it was stopped, and what happens next."""
+    rt = get_runtime()
+    session = rt.sessions.get(session_id)
+    if session is None:
+        return _error(404, "UNKNOWN_SESSION", f"no session with id {session_id}")
+    history = [s.as_dict() for s in rt.sessions.list(500) if s.session_id != session_id]
+    return explain_session(session.as_dict(), history)
+
+
+@explain_router.get("/metrics")
+def explain_metrics() -> dict[str, Any]:
+    rt = get_runtime()
+    sessions = [s.as_dict() for s in rt.sessions.list(1000)]
+    body = metrics(sessions)
+    body["chain"] = rt.chain.verify().as_dict()
+    return body
 
 
 # ----------------------------------------------------------------- app --

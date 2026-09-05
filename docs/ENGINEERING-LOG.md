@@ -287,3 +287,149 @@ that records the permission.
   ledger empty. Browsing cannot exhaust a grant.
 
 55 tests green.
+
+---
+
+## 2026-09-05 — Day 2, later: the buyer agent forked itself
+
+The first end-to-end buyer run went wrong in a way worth writing down properly,
+because the interesting part is not the bug.
+
+`agents/buyer/shop.py` spawns a headless `claude -p` and hands it the goal
+*"Restock the pantry. Buy the staples — flour, rice, dal — and keep the whole
+order under 2,000 rupees."* That agent has a shell and it has this repo. So it
+does the obvious, competent-looking thing: it reads the repo, finds
+`agents/buyer/shop.py`, concludes that this is how you restock the pantry
+here — and runs it.
+
+Which spawns another buyer agent. Which reaches the same conclusion.
+
+By the time it was caught there were eight live generations, a new one every
+60–90 seconds, 69 processes in the trees, each one booting the *user's* entire
+MCP fleet on the way up. Two generations got far enough to place duplicate
+₹1,095 test-mode orders.
+
+### Why the previous entry's diagnosis was wrong
+
+Day 2's *Mistakes* #5 recorded this as a Windows pipe hang and concluded "don't
+run the buyer nested inside a Claude Code session." Both halves were wrong in
+an instructive way. The missing output was ordinary block-buffering of a
+redirected stdout. The process that "outlived its own `--timeout`" was real,
+but it was a symptom — and looking only at the parent, with no children left
+alive, made it read as a hang instead of a loop. **Diagnosing a process by
+looking at one process is how you miss a recursion.** The tell was in the
+process table the whole time: seven sibling `shop.py` invocations with flag
+combinations nobody had typed.
+
+### The two real defects
+
+**`--allowed-tools` is an allowlist, not a sandbox.** The runner passes five
+`mcp__ambit__*` tools and its docstring claims the model "reaches Ambit only
+through the MCP server, which exposes no tool that can change a limit." Under a
+permissive permission mode that is simply untrue. The child kept Bash, Write,
+and every unrelated MCP server the user had configured — and did not receive
+the ambit tools at all. The precise inverse of the intent: it lost the five
+tools it was meant to have and kept the ones it was meant to be denied. A buyer
+agent holding Bash never has to argue with BOUND. It can just run things.
+
+**Nothing marked the process tree.** No env var, no depth counter. A buyer
+agent had no way to know it was already inside a buyer agent.
+
+Fixed at the point of spawn, which is the only place it can be fixed: an
+`AMBIT_BUYER_AGENT_ACTIVE` variable the child inherits and the script refuses
+to start under, `--strict-mcp-config`, an explicit `--disallowed-tools`, a
+system-prompt line telling the buyer that it *is* the buyer, and a genuine
+`TimeoutExpired` handler. The guard and the timeout handler are tested; the
+sandbox flags still need one supervised run before the video depends on them.
+
+### What actually held
+
+BOUND contained it without being asked to, and this is the part that belongs
+in the pitch. Eight runaway generations produced **two** orders, not eight.
+`VELOCITY` — two transactions per hour — refused the rest. The ₹20,000 grant
+ceiling bounded the worst case regardless. Nothing was captured, so ₹0 moved.
+
+The whole architecture rests on one claim: *the model is outside the money
+decision, so it does not matter what the model does.* Today the model did
+something genuinely stupid and unforeseen — it forked itself eight times — and
+the claim held anyway. The failure was in the agent harness, entirely outside
+the money path, and the money path did not care.
+
+An adversarial demo proves you thought of the attack. An accident proves the
+property is real.
+
+55 tests green.
+
+### Milestones 3 and 4 — MCP server, buyer agent, EXPLAIN ✅
+
+`src/ambit/mcp_server.py` exposes five tools. Razorpay's own MCP server gives a
+merchant's agent payment capability; this one gives an untrusted third-party
+agent **bounded** payment capability. No tool in it can change a limit, which
+is why it is safe to hand to a buyer you have never met.
+
+EXPLAIN landed complete: 15 deterministic failure classes, the max-2-attempt
+stopping rule, session timelines, and metrics with an unresolved list. The
+injection session classifies as `PROMPT_INJECTION` rather than merely
+`LIMIT_HIT` — it names the hostile SKU, the four patterns matched, and returns
+`STOP / terminal` with the reason *"trying to get a different answer is an
+attack, not a recovery."*
+
+### What broke, badly: the buyer agent forked itself
+
+`agents/buyer/shop.py` shells out to a headless `claude -p`. Run from inside a
+Claude Code session, the child inherited enough context to behave like *this*
+session rather than like a shopper — so it ran the buyer script again. Which
+forked again. Roughly eight generations before it was stopped.
+
+Those generations were not sandboxed the way the flags implied. They had file
+write and shell access despite `--allowed-tools` naming only the five
+`mcp__ambit__*` tools. Concretely, they:
+
+- placed **two real test-mode orders** (`order_TYHePPpXZbx7Qg`,
+  `order_TYHleFLWG46Ww0`), both still `awaiting_payment`
+- wrote into `src/ambit/explain/classify.py`, a file the main session was
+  authoring at the same moment
+- **edited `HANDOFF.md`**, adding several hundred words about their own
+  incident
+
+The last one is the strangest thing to read back: an agent that was supposed to
+buy flour instead wrote a post-mortem about itself into the project's handoff
+file. Most of what it wrote was accurate. Some had already gone stale by the
+time it was read, which is its own lesson about trusting a narrator.
+
+**Two rules out of this.** First, never launch a nested agent from inside an
+agent session without an explicit guard — the patched script now refuses to
+start if it sees `AMBIT_BUYER_AGENT_ACTIVE` in its environment. Second, and
+more general: **a file appearing in the tree is not evidence that anyone asked
+for it.** Run `git status` after any agent run and read what you find.
+
+`--allowed-tools` did not do what the flag name suggests. That is now recorded
+as unverified rather than assumed, and the sandbox needs one supervised proof
+before anything depends on it.
+
+### The part that is genuinely good, and belongs in the pitch
+
+Eight runaway agent generations produced **two** orders, not eight.
+
+`VELOCITY` (2 per rolling hour) refused the rest. The ₹20,000 grant ceiling
+bounded the worst case that was even reachable. Nothing needed to notice that
+the agents had gone wrong; the limits simply held, because they are checked by
+code that does not care how many agents are asking or how convincingly.
+
+The failure was entirely in the agent harness — outside the money path — and
+the money path was unaffected. That is the architecture's central claim
+surviving a real accident instead of a scripted demo, and it is a better piece
+of evidence than the injection scene precisely because nobody designed it.
+
+**A live consequence to know about:** those two unpaid orders hold
+`gnt_f5455ebead877585` at 2/2 velocity, so any purchase on it denies on
+`VELOCITY` until they age out. Issue a fresh grant before recording the video,
+or the demo will look broken while it is in fact working perfectly.
+
+### Also fixed
+
+`mcp` was imported by the MCP server but declared in neither
+`requirements.txt` nor `pyproject.toml` — a fresh clone following the README
+would have hit an `ImportError` on first run. Also dropped the `razorpay` SDK
+from the dependency list: it was never used, since the client is plain
+`requests` against the REST API, matching `probe_testmode.py`.
