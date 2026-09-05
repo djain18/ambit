@@ -73,8 +73,23 @@ cp env.example .env              # then fill in your rzp_test_ keys
 
 python execution/issue_grant.py keygen
 python execution/issue_grant.py issue --hours 24
-python -m pytest
+
+python -m pytest                                    # 103 tests
+python execution/run_evals.py                       # 63 labelled scenarios
+python execution/verify_audit_chain.py --self-test  # proves tampering is caught
+
+PYTHONPATH=src python -m uvicorn ambit.app:app --port 8000
 ```
+
+Then open **<http://127.0.0.1:8000/>** for the overview and
+**<http://127.0.0.1:8000/console>** for the merchant console: agent sessions
+with all ten checks per decision, live grants with a working revoke button, and
+the record with a Verify Integrity button.
+
+The console is deliberately **just another API client**. It has no privileged
+path to the store, the chain or the decision engine, so anything it shows you
+can be reproduced with `curl`. A console with a back door is one that can lie
+about what the audit chain says.
 
 Ambit refuses to start against a key that does not begin with `rzp_test_`.
 That rail is on by default (`AMBIT_REQUIRE_TEST_MODE=true`) and is enforced in
@@ -170,8 +185,8 @@ ambit/
     explain/               the hash chain, classification, the timeline
     open/                  catalog and agent checkout
   agents/buyer/            the LLM shopper, outside the money path
-  tests/                   35 tests: one per reason code, plus boundaries
-  evals/                   the labelled scenario suite
+  tests/                   103 tests: one per reason code, plus boundaries and EXPLAIN
+  evals/                   63 labelled scenarios, run in CI
   docs/ARCHITECTURE.md     how it fits together, and what was left out
   docs/ENGINEERING-LOG.md  written daily, including what broke
 ```
@@ -183,6 +198,39 @@ skill — that deviation is stated rather than hidden.
 
 ---
 
+## Verification
+
+Everything below is run, not asserted.
+
+| Command | What it proves |
+|---|---|
+| `python -m pytest` | 103 tests: one per reason code, boundaries, and the EXPLAIN layer |
+| `python execution/run_evals.py` | 63 labelled scenarios, 63 correct. Asserts the outcome **and** the binding check, because the right answer for the wrong reason is still a bug |
+| `python execution/verify_audit_chain.py --self-test` | The chain verifies when intact **and breaks when edited**. A verifier that always says VERIFIED is worse than no verifier |
+
+CI runs all three on every push.
+
+The decision layer is deterministic, so the eval target is 100% rather than a
+percentage anyone can shrug at. One miss exits 1 and fails the build.
+
+---
+
+## Documentation
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — how it fits together, where a
+  model is deliberately **not** used, and what this does not claim
+- [docs/ENGINEERING-LOG.md](docs/ENGINEERING-LOG.md) — written daily, including
+  the day the buyer agent forked itself
+
+---
+
 ## Status
 
-Test mode only. Nothing here touches real money.
+Test mode only. Nothing here touches real money. `AMBIT_REQUIRE_TEST_MODE=true`
+makes the app refuse to start on a key that does not begin `rzp_test_`.
+
+Known gaps, dated 2026-09-05 and listed in full in the architecture document:
+webhook delivery is unverified, so no budget has been debited by capture and
+`money_moved` reads zero; the buyer agent's sandbox flags are not independently
+verified; the store is single-process JSON, correct for a demo but not for
+production.

@@ -228,6 +228,46 @@ denied purchase is the system working. Retrying it would be a security bug
 wearing resilience as a costume — and "the agent tried 40 times and the 40th
 went through" is the exact failure this project exists to prevent.
 
+### Measurement
+
+[`execution/run_evals.py`](../execution/run_evals.py) runs the labelled
+scenarios in [`evals/scenarios.json`](../evals/scenarios.json) against the real
+engine — no network, no keys, no model, and a fresh store and chain per
+scenario so none can see another's ledger.
+
+```
+Ambit decision evals: 63/63 correct (100.0%, target 100%)
+
+  ok    allow       2/2      ok    limit       3/3
+  ok    boundary    8/8      ok    precedence  7/7
+  ok    budget      4/4      ok    replay      5/5
+  ok    grant      10/10     ok    scope      11/11
+  ok    injection   4/4      ok    stepup      4/4
+                             ok    velocity    5/5
+Nothing unresolved.
+```
+
+**The target is 100% because the layer is deterministic.** That is the claim
+being made, so a single miss exits 1 and fails CI rather than being reported as
+a percentage anyone can shrug at.
+
+A scenario passes only if **both** the outcome and the binding check match.
+Getting `DENY` for the wrong reason is still wrong: an audit trail whose reason
+codes cannot be trusted is worse than no audit trail, because someone will
+believe it.
+
+Writing the suite found two defects. One was a bug in the runner. The other was
+a wrong expectation of mine — I labelled a replayed request that switched
+merchant as binding on `IDEMPOTENCY`, but the substituted merchant was out of
+scope, so `MERCHANT_ALLOWED` correctly bound first. The engine was right and the
+label was wrong. That is the suite doing its job in the only direction that
+matters.
+
+Alongside it, `verify_audit_chain.py --self-test` builds a throwaway chain,
+verifies it, edits a past row, and fails unless the break is caught. A verifier
+that always says VERIFIED is worse than no verifier. CI runs the tests (103),
+the evals (63) and that self-test on every push.
+
 ---
 
 ## 6. Trust boundaries
@@ -331,7 +371,7 @@ ambit/
     open/                catalog · sessions
     explain/             chain · classify · recovery · report
   agents/buyer/shop.py   the untrusted buyer, outside the money path
-  tests/                 55 tests
+  tests/                 103 tests
   docs/ENGINEERING-LOG.md
 ```
 

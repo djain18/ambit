@@ -433,3 +433,109 @@ or the demo will look broken while it is in fact working perfectly.
 would have hit an `ImportError` on first run. Also dropped the `razorpay` SDK
 from the dependency list: it was never used, since the client is plain
 `requests` against the REST API, matching `probe_testmode.py`.
+
+---
+
+## 2026-09-05 — Day 2, later still: the console, the evals, and two wrong beliefs
+
+Deadline day. Milestones 1 through 4 were already done and verified. This
+session closed the rest: the architecture document, the console, a landing
+page, the labelled scenario suite, and the tests the EXPLAIN layer never had.
+
+### A stale warning that cost nothing only because it was checked
+
+The handoff opened with a red warning to issue a fresh grant before recording,
+because two runaway orders held `gnt_f5455ebead877585` at 2/2 on velocity.
+Checking the actual clock first showed both orders (08:07Z and 08:14Z) had
+aged out of the rolling hour. The grant read `ok`, 0 of 2, ₹0.00 spent.
+
+The warning was true when written and false four hours later. It is now struck
+through in the handoff rather than deleted, so nobody re-derives the panic.
+The general rule this reinforces: **a warning about live state needs a
+timestamp and a re-check instruction, or it becomes a lie on a delay.**
+
+### The one that actually stung: I lost track of the clock
+
+Partway through, I started reporting the time from my own *plan* rather than
+from the system. The plan said console at 16:00 and evals at 17:30, so when
+the console was done I reported it as roughly 17:30 and told Daksh we were an
+hour behind with only 90 minutes of runway left. He asked what time I thought
+it was. It was 15:37. Thirty-three minutes had passed, not three and a half
+hours, and we were about two hours *ahead* of plan, not behind.
+
+Nothing was lost except a bad recommendation: I had proposed cutting the eval
+suite to protect a deadline that was not close. Had he not asked, the suite
+would have been dropped for no reason.
+
+This is the same failure as Mistake #4 in the handoff, in a new costume. That
+one was two files disagreeing about the date. This one was a plan and a clock
+disagreeing, with nothing reconciling them. → **Elapsed time is measured, not
+inferred. Run `date` before making any claim about the hour, and never quote a
+schedule slot as if it were the current time.**
+
+### A wrong belief about the design, caught by tooling
+
+The first console draft was a dark dashboard, and Daksh called it AI slop. He
+was right. The replacement direction I chose was warm paper, Instrument Serif,
+a vermilion stamp accent: an audit-ledger aesthetic that felt considered.
+
+Running it through the `design-taste-frontend` skill was uncomfortable and
+useful. That skill names Instrument Serif as one of *two* banned
+LLM-favourite display serifs, and lists the exact palette family I had picked
+(`#f7f4ed` ground, clay accent, espresso ink) as the default an AI reaches for
+when a brief smells editorial. My "considered" direction was the median
+machine answer wearing a costume.
+
+Final system: Geist and Geist Mono, zinc neutrals, one blue accent, semantic
+colour reserved for ALLOW and DENY, radius 0, light theme locked. Verified
+headless rather than by eye: no console errors, no failed requests, zero
+horizontal overflow at 1440/1200/1024/390, fonts confirmed loading, hero
+headline 2 lines at every desktop width. The first measurement caught a
+4-line headline the screenshot had made look fine.
+
+→ **Taste tooling is worth running precisely when you think you do not need
+it.** The output I was proudest of was the one it rejected.
+
+### The evals found a bug in my own expectations
+
+63 labelled scenarios across 11 families. Each asserts the outcome **and** the
+binding check, because getting `DENY` for the wrong reason is still wrong: an
+audit trail whose reason codes cannot be trusted is worse than none, since
+someone will believe it.
+
+First run: 57 of 63. Six failures, and they split into two different kinds.
+
+Five were a bug in the runner. The sixth was more interesting. I had written a
+scenario asserting that replaying a request id with a different merchant binds
+on `IDEMPOTENCY`. It bound on `MERCHANT_ALLOWED` instead, and the engine was
+right: the substituted merchant was not on the allowlist, and check 5 runs
+before check 10. My label encoded a belief about precedence that the fixed
+order contradicts. The scenario now puts both merchants in scope, so it tests
+what it claims to.
+
+→ **A failing eval is not automatically a bug in the system.** Half the value
+of a labelled suite is that it audits the labeller.
+
+Then, because a suite that cannot fail is decoration, I broke one label on
+purpose and confirmed the runner exits 1 and names the mismatch. Same reasoning
+produced `verify_audit_chain.py --self-test`: it builds a throwaway chain,
+verifies it, edits a past row, and fails unless the break is caught. A verifier
+that always says VERIFIED is worse than no verifier, because people believe it.
+
+### Closing the test gap
+
+`classify.py`, `recovery.py` and `report.py` had been exercised only through
+the API. 48 new tests pin them directly, including one parameterised over
+*every* class marked `POLICY`, so a future class cannot be added without
+inheriting the never-retry rule. Suite went from 55 to 103.
+
+### State at the end of the session
+
+103 tests green. 63 of 63 evals correct. Chain self-test passing. CI running
+all three on every push. Landing page and console live, both from real data.
+Architecture document written, including the section on where a model is
+deliberately absent.
+
+Still open and honestly listed: webhook delivery is unverified, so
+`money_moved` reads ₹0 and only the in-flight hold has been exercised; the
+buyer agent's sandbox flags remain unproven end to end.
